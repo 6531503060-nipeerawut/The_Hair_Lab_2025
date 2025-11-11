@@ -1,50 +1,89 @@
-import React, { useState } from "react";
+import React, { useContext, useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { SERVICES, TIME_SLOTS } from "../services/constants";
-// Import our new hook and API functions
+import { TIME_SLOTS } from "../services/constants";
 import { useAuth } from "../context/AuthContext";
-import { createBooking } from "../services/api"; // <-- Changed from store.js to api.js
+import { createBooking, getServices } from "../services/api";
 
 export default function BookingPage() {
   const navigate = useNavigate();
-  // Get all user info from our hook
   const { currentUser, userData } = useAuth();
+
+  const [services, setServices] = useState([]);
+  const [loadingServices, setLoadingServices] = useState(true);
+
   const [selectedService, setSelectedService] = useState("");
   const [selectedDate, setSelectedDate] = useState("");
   const [selectedTime, setSelectedTime] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // ✅ Redirect logic is REMOVED (handled by UserProtectedRoute)
+  useEffect(() => {
+    const fetchServices = async () => {
+      try {
+        setLoadingServices(true);
+        const data = await getServices();
+        setServices(data);
+      } catch (err) {
+        console.error("Error fetching services:", err);
+        alert("Failed to load services. Please check the console.");
+      }
+      setLoadingServices(false);
+    };
+    fetchServices();
+  }, []);
 
-  // ✅ Confirm booking
+
   const confirmBooking = async () => {
-    if (!selectedService || !selectedDate || !selectedTime) {
-      alert("⚠️ Please select all fields before confirming.");
+
+    // The debug check
+    if (!selectedService) {
+      alert("⚠️ Please select a SERVICE.");
+      return;
+    }
+    if (!selectedDate) {
+      alert("⚠️ Please select a DATE.");
+      return;
+    }
+    if (!selectedTime) {
+      alert("⚠️ Please select a TIME.");
       return;
     }
 
-    const price =
-        SERVICES.find((s) => s.name === selectedService)?.price || "฿0";
+    if (!userData) {
+      alert("Error: User data is not available. Please try logging out and back in.");
+      console.error("confirmBooking failed: userData is null");
+      return;
+    }
 
-    // ✅ Build the new booking data
+    // --- THIS IS THE FIX (Part 1) ---
+    // Find the object using 'name'
+    const serviceObject = services.find(
+        (s) => s.name === selectedService
+    );
+    // ---------------------------------
+
+    if (!serviceObject) {
+      alert("Error finding service. Please refresh.");
+      return;
+    }
+
     const bookingData = {
       service: selectedService,
       date: selectedDate,
       time: selectedTime,
-      price,
+      price: "฿" + serviceObject.price,
       status: "pending",
-      // --- CRITICAL: Link booking to user ---
-      userId: currentUser.uid, // <-- The Firebase User ID
-      customerName: userData.name, // <-- From 'users' collection
-      customerEmail: userData.email, // <-- From 'users' collection
+      userId: currentUser.uid,
+      customerName: userData.name,
+      customerEmail: userData.email,
     };
 
     try {
       setIsSubmitting(true);
-      await createBooking(bookingData); // <-- Use new api.js function
+      await createBooking(bookingData);
       alert("✅ Booking confirmed successfully!");
       navigate("/user/bookings");
-    } catch (err) {
+    } catch (err)
+    {
       console.error("Error while confirming booking:", err);
       alert("❌ Failed to confirm booking. Please try again.");
     } finally {
@@ -59,34 +98,47 @@ export default function BookingPage() {
         </h2>
 
         <div className="bg-white/80 backdrop-blur-lg p-8 rounded-3xl shadow-2xl space-y-8">
-          {/* ✅ Select Service (no change) */}
+          {/* ✅ Select Service */}
           <div>
             <label className="block text-xl font-bold mb-4 text-gray-800">
               Select Service
             </label>
             <div className="grid grid-cols-2 gap-4">
-              {SERVICES.map((service) => (
-                  <button
-                      key={service.id}
-                      onClick={() => setSelectedService(service.name)}
-                      className={`p-6 rounded-2xl border-2 transition-all transform hover:scale-105 ${
-                          selectedService === service.name
-                              ? "border-purple-600 bg-gradient-to-br from-purple-50 to-pink-50 shadow-lg"
-                              : "border-gray-200 hover:border-purple-300 bg-white"
-                      }`}
-                  >
-                    <div className="text-3xl mb-2">{service.icon}</div>
-                    <p className="font-bold text-lg">{service.name}</p>
-                    <p className="text-sm text-gray-600">{service.duration}</p>
-                    <p className="text-purple-600 font-bold text-xl mt-2">
-                      {service.price}
-                    </p>
-                  </button>
-              ))}
+              {loadingServices ? (
+                  <p className="col-span-2 text-center text-gray-600">Loading services...</p>
+              ) : services.length === 0 ? (
+                  <p className="col-span-2 text-center text-red-600">
+                    No services found.
+                  </p>
+              ) : (
+                  services.map((service) => (
+                      <button
+                          key={service.id}
+                          // --- THIS IS THE FIX (Part 2) ---
+                          // Pass 'service.name' to the handler
+                          onClick={() => setSelectedService(service.name)}
+                          className={`p-6 rounded-2xl border-2 transition-all transform hover:scale-105 ${
+                              // Check against 'service.name'
+                              selectedService === service.name
+                                  ? "border-purple-600 bg-gradient-to-br from-purple-50 to-pink-50 shadow-lg"
+                                  : "border-gray-200 hover:border-purple-300 bg-white"
+                          }`}
+                      >
+                        <div className="text-3xl mb-2">{service.icon}</div>
+                        {/* --- THIS IS THE FIX (Part 3) --- */}
+                        {/* Display 'service.name' */}
+                        <p className="font-bold text-lg">{service.name}</p>
+                        <p className="text-sm text-gray-600">{service.duration}</p>
+                        <p className="text-purple-600 font-bold text-xl mt-2">
+                          {"฿" + service.price}
+                        </p>
+                      </button>
+                  ))
+              )}
             </div>
           </div>
 
-          {/* ✅ Select Date (no change) */}
+          {/* ✅ Select Date */}
           <div>
             <label className="block text-xl font-bold mb-4 text-gray-800">
               Select Date
@@ -99,7 +151,7 @@ export default function BookingPage() {
             />
           </div>
 
-          {/* ✅ Select Time (no change) */}
+          {/* ✅ Select Time */}
           <div>
             <label className="block text-xl font-bold mb-4 text-gray-800">
               Select Time
@@ -121,7 +173,7 @@ export default function BookingPage() {
             </div>
           </div>
 
-          {/* ✅ Confirm Button (no change) */}
+          {/* ✅ Confirm Button */}
           <button
               onClick={confirmBooking}
               disabled={isSubmitting}

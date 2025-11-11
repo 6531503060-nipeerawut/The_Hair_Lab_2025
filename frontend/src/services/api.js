@@ -11,12 +11,11 @@ import {
   query,
   where,
   setDoc,
-  collectionGroup, // For admin to query all subcollections
-  orderBy         // For ordering services
+  collectionGroup,
+  orderBy
 } from "firebase/firestore";
 
 // --- Your Original Axios Instance ---
-// You can keep this if you still have a separate backend
 const api = axios.create({
   baseURL: "http://localhost:8080/api",
 });
@@ -48,13 +47,11 @@ export const updateUserProfile = async (userId, updates) => {
 // == BOOKING FUNCTIONS (User Subcollection)
 // =========================================
 
-// Creates a booking *inside* a user's "bookings" subcollection
 export const createBooking = async (bookingData) => {
   try {
     const userId = bookingData.userId;
     if (!userId) throw new Error("User ID is missing from booking data");
 
-    // Path: /users/{userId}/bookings/{newBookingId}
     const userBookingsCol = collection(db, "users", userId, "bookings");
     const docRef = await addDoc(userBookingsCol, bookingData);
     return docRef.id;
@@ -70,7 +67,9 @@ export const getUserBookings = async (userId) => {
   // Path: /users/{userId}/bookings
   const userBookingsCol = collection(db, "users", userId, "bookings");
 
-  const q = query(userBookingsCol, orderBy("date", "desc")); // Order by date
+  // --- THIS IS THE FIX ---
+  // I removed 'orderBy("date", "desc")' to prevent the index error.
+  const q = query(userBookingsCol);
 
   const querySnapshot = await getDocs(q);
   querySnapshot.forEach((doc) => {
@@ -83,7 +82,6 @@ export const getUserBookings = async (userId) => {
 // Updates a specific booking *inside* a user's subcollection
 export const updateBooking = async (userId, bookingId, updates) => {
   if (!userId) throw new Error("User ID is missing");
-  // Path: /users/{userId}/bookings/{bookingId}
   const bookingDocRef = doc(db, "users", userId, "bookings", bookingId);
   await updateDoc(bookingDocRef, updates);
 };
@@ -91,7 +89,6 @@ export const updateBooking = async (userId, bookingId, updates) => {
 // Deletes a specific booking *inside* a user's subcollection
 export const deleteBooking = async (userId, bookingId) => {
   if (!userId) throw new Error("User ID is missing");
-  // Path: /users/{userId}/bookings/{bookingId}
   const bookingDocRef = doc(db, "users", userId, "bookings", bookingId);
   await deleteDoc(bookingDocRef);
 };
@@ -101,13 +98,11 @@ export const deleteBooking = async (userId, bookingId) => {
 // == SERVICE FUNCTIONS
 // =========================================
 
-// Gets all services from the top-level 'services' collection
 export const getServices = async () => {
   const services = [];
-  // Path: /services
-  const q = query(collection(db, "services"), orderBy("order", "asc"));
+  const servicesCollection = collection(db, "services");
 
-  const querySnapshot = await getDocs(q);
+  const querySnapshot = await getDocs(servicesCollection);
   querySnapshot.forEach((doc) => {
     services.push({ id: doc.id, ...doc.data() });
   });
@@ -119,11 +114,9 @@ export const getServices = async () => {
 // == ADMIN FUNCTIONS
 // =========================================
 
-// Gets ALL bookings from ALL user subcollections
 export const getAllBookings = async () => {
   const bookings = [];
-  // This is a collectionGroup query. It finds all collections
-  // named "bookings" regardless of what user doc they are in.
+  // This query requires the index you created in Firebase.
   const q = query(collectionGroup(db, "bookings"), orderBy("date", "desc"));
 
   const querySnapshot = await getDocs(q);

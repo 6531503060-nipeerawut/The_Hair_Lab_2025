@@ -3,7 +3,6 @@ import { useNavigate } from "react-router-dom";
 import BookingCard from "../components/BookingCard";
 import RescheduleModal from "../components/RescheduleModal";
 import CancelModal from "../components/CancelModal";
-
 import { useAuth } from "../context/AuthContext";
 import {
   getUserBookings,
@@ -13,10 +12,10 @@ import {
 
 export default function MyBookingsPage() {
   const nav = useNavigate();
-  const { currentUser } = useAuth(); // <-- Get the Firebase user
+  const { currentUser } = useAuth(); // Get the Firebase user
 
   const [bookings, setBookings] = useState([]);
-  const [loading, setLoading] = useState(true); // <-- Starts true, which is correct
+  const [loading, setLoading] = useState(true); // Start as true
   const [resOpen, setResOpen] = useState(false);
   const [resDate, setResDate] = useState("");
   const [resTime, setResTime] = useState("");
@@ -26,11 +25,17 @@ export default function MyBookingsPage() {
   const [cancelId, setCancelId] = useState(null);
 
   // --- THIS IS THE FIX ---
-  // We use useEffect to fetch data *only when currentUser changes*
+  // This useEffect hook listens for changes to currentUser
   useEffect(() => {
     // Define an async function *inside* the effect
     const fetchBookings = async () => {
-      // We already know currentUser exists, so just fetch
+      // We check currentUser *inside* the function
+      if (!currentUser) {
+        setLoading(false);
+        return;
+      }
+
+      setLoading(true);
       try {
         const data = await getUserBookings(currentUser.uid);
         setBookings(Array.isArray(data) ? data : []);
@@ -38,20 +43,14 @@ export default function MyBookingsPage() {
         console.error("Error fetching bookings:", err);
         setBookings([]);
       }
-      setLoading(false); // <-- Set loading false *after* fetching
+      setLoading(false); // Set loading false *after* fetching
     };
 
-    if (currentUser) {
-      // If there is a user, fetch their bookings
-      fetchBookings();
-    } else {
-      // If there is no user (logged out), stop loading immediately
-      setBookings([]); // Clear any old data
-      setLoading(false); // <-- This was the missing piece
-    }
+    fetchBookings(); // Call the function
+
   }, [currentUser]); // The dependency array is the key
 
-  // --- (Your other functions remain the same) ---
+  // --- (Your other functions) ---
 
   const openReschedule = (id) => {
     setResId(id);
@@ -61,12 +60,8 @@ export default function MyBookingsPage() {
   const confirmReschedule = async () => {
     if (!resId || !resDate || !resTime) return;
     try {
-      // We need to pass the userId now
       await updateBooking(currentUser.uid, resId, { date: resDate, time: resTime });
       setResOpen(false);
-      setResId(null);
-      setResDate("");
-      setResTime("");
       // Re-fetch after update
       const data = await getUserBookings(currentUser.uid);
       setBookings(Array.isArray(data) ? data : []);
@@ -85,10 +80,8 @@ export default function MyBookingsPage() {
   const confirmCancel = async () => {
     if (!cancelId) return;
     try {
-      // We need to pass the userId now
       await deleteBooking(currentUser.uid, cancelId);
       setCancelOpen(false);
-      setCancelId(null);
       // Re-fetch after delete
       const data = await getUserBookings(currentUser.uid);
       setBookings(Array.isArray(data) ? data : []);
@@ -143,7 +136,7 @@ export default function MyBookingsPage() {
             </div>
         )}
 
-        {/* Modals (no change) */}
+        {/* Modals */}
         <RescheduleModal
             open={resOpen}
             date={resDate}

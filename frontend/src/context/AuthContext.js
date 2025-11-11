@@ -6,97 +6,97 @@ import {
   createUserWithEmailAndPassword,
   signOut,
 } from "firebase/auth";
-import { doc, getDoc, setDoc } from "firebase/firestore"; // <-- Import firestore functions
+import { doc, getDoc, setDoc } from "firebase/firestore";
 
 export const AuthContext = createContext();
 
-// Create a hook to use the context easily
 export const useAuth = () => {
   return useContext(AuthContext);
 };
 
 export const AuthProvider = ({ children }) => {
-  const [currentUser, setCurrentUser] = useState(null); // This is the Firebase user object
-  const [userData, setUserData] = useState(null); // This is your user data from Firestore
+  const [currentUser, setCurrentUser] = useState(null);
+  const [userData, setUserData] = useState(null);
   const [isAdmin, setIsAdmin] = useState(false);
-  const [loading, setLoading] = useState(true); // Loading state for initial auth check
+  const [loading, setLoading] = useState(true);
 
-  // Firebase login function
   const login = (email, password) => {
     return signInWithEmailAndPassword(auth, email, password);
   };
 
-  // Firebase signup function
+  // --- THIS FUNCTION IS UPDATED ---
   const signup = async (email, password, name, phone) => {
     const userCredential = await createUserWithEmailAndPassword(auth, email, password);
     const user = userCredential.user;
 
-    // Now, create a user document in Firestore
-    const userDocRef = doc(db, "users", user.uid);
-    await setDoc(userDocRef, {
+    // Create the data object
+    const newUserData = {
       name: name,
       email: email,
       phone: phone,
       role: "user", // Default role
-    });
+    };
+
+    // Now, create a user document in Firestore
+    const userDocRef = doc(db, "users", user.uid);
+    await setDoc(userDocRef, newUserData);
+
+    // --- THIS IS THE FIX ---
+    // Manually set the userData in our context
+    // This prevents the race condition on signup
+    setUserData(newUserData);
+    // --------------------
 
     return userCredential;
   };
 
-  // Firebase logout function
   const logout = () => {
     return signOut(auth);
   };
 
-  // This is the core!
-  // It listens for auth changes and updates state
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
-      setCurrentUser(user); // Set the Firebase user
+      setCurrentUser(user);
 
       if (user) {
-        // User is logged in. Now, get their data from Firestore.
         const userDocRef = doc(db, "users", user.uid);
         const docSnap = await getDoc(userDocRef);
 
         if (docSnap.exists()) {
           const data = docSnap.data();
-          setUserData(data); // Set the extra user data (name, phone)
-
-          // Check for admin role
-          // Note: A secure way is using Firebase Custom Claims
-          // For now, we'll check a 'role' field in their Firestore document
+          setUserData(data);
           setIsAdmin(data.role === "admin");
-
         } else {
-          // This case should ideally not happen if signup is correct
-          console.log("No user data found in Firestore!");
-          setUserData(null);
+          // This can happen on signup race condition,
+          // but our new signup function fixes it.
+          if (!userData) { // Only set to null if not already set by signup
+            setUserData(null);
+          }
           setIsAdmin(false);
         }
       } else {
-        // User is logged out
         setUserData(null);
         setIsAdmin(false);
       }
-      setLoading(false); // Done checking auth
+      setLoading(false);
     });
 
-    return unsubscribe; // Cleanup listener on unmount
+    return unsubscribe;
   }, []);
 
+  // --- THIS VALUE OBJECT IS UPDATED ---
   const value = {
     currentUser,
     userData,
-    isLoggedIn: !!currentUser, // True if currentUser is not null
+    setUserData, // <-- ADD THIS so ProfilePage can use it
+    isLoggedIn: !!currentUser,
     isAdmin,
     login,
     signup,
     logout,
-    loading, // <-- ADD THIS LINE
+    loading,
   };
 
-  // Render children only after the initial auth check is complete
   return (
       <AuthContext.Provider value={value}>
         {!loading && children}
