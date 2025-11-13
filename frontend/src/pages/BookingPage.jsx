@@ -16,7 +16,7 @@ export default function BookingPage() {
   const [selectedTime, setSelectedTime] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const [bookedTimes, setBookedTimes] = useState([]);
+  const [bookedTimes, setBookedTimes] = useState([]); // This is correct
 
   // Load all available services
   useEffect(() => {
@@ -34,16 +34,22 @@ export default function BookingPage() {
     fetchServices();
   }, []);
 
-  // ✅ Load booked time slots when a date is selected
+  // Load booked time slots when a date is selected
   useEffect(() => {
     const fetchBookedTimes = async () => {
       if (!selectedDate) return;
+      setBookedTimes([]); // Clear old times
       try {
         const bookings = await getBookingsByDate(selectedDate);
-        const times = bookings.map((b) => b.time);
+        // We only care about confirmed or pending bookings
+        const times = bookings
+            .filter(b => b.status === 'confirmed' || b.status === 'pending')
+            .map((b) => b.time);
         setBookedTimes(times);
       } catch (err) {
         console.error("Error fetching booked times:", err);
+        // This will show if the index is missing
+        alert("Failed to check available times. Please try again.");
       }
     };
     fetchBookedTimes();
@@ -90,13 +96,15 @@ export default function BookingPage() {
 
     try {
       setIsSubmitting(true);
-
-      // ✅ Check for duplicates before creating a new booking
+      // Double-check just before creating
       const existingBookings = await getBookingsByDate(selectedDate);
-      const duplicate = existingBookings.find((b) => b.time === selectedTime);
+      const duplicate = existingBookings.find((b) => b.time === selectedTime && (b.status === 'confirmed' || b.status === 'pending'));
+
       if (duplicate) {
-        alert("❌ This time slot is already booked. Please choose another time.");
+        alert("❌ This time slot was just booked. Please choose another time.");
         setIsSubmitting(false);
+        // Re-fetch booked times
+        setBookedTimes(prev => [...prev, selectedTime]);
         return;
       }
 
@@ -112,105 +120,116 @@ export default function BookingPage() {
   };
 
   return (
-    <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
-      <h2 className="text-4xl font-bold mb-8 bg-gradient-to-r from-purple-600 to-pink-600 bg-clip-text text-transparent">
-        Book Your Appointment
-      </h2>
+      <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
+        <h2 className="text-4xl font-bold mb-8 bg-gradient-to-r from-purple-600 to-pink-600 bg-clip-text text-transparent">
+          Book Your Appointment
+        </h2>
 
-      <div className="bg-white/80 backdrop-blur-lg p-8 rounded-3xl shadow-2xl space-y-8">
-        {/* ✅ Select Service */}
-        <div>
-          <label className="block text-xl font-bold mb-4 text-gray-800">
-            Select Service
-          </label>
-          <div className="grid grid-cols-2 gap-4">
-            {loadingServices ? (
-              <p className="col-span-2 text-center text-gray-600">
-                Loading services...
-              </p>
-            ) : services.length === 0 ? (
-              <p className="col-span-2 text-center text-red-600">
-                No services found.
-              </p>
-            ) : (
-              services.map((service) => (
-                <button
-                  key={service.id}
-                  onClick={() => setSelectedService(service.name)}
-                  className={`p-6 rounded-2xl border-2 transition-all transform hover:scale-105 ${
-                    selectedService === service.name
-                      ? "border-purple-600 bg-gradient-to-br from-purple-50 to-pink-50 shadow-lg"
-                      : "border-gray-200 hover:border-purple-300 bg-white"
-                  }`}
-                >
-                  <div className="text-3xl mb-2">{service.icon}</div>
-                  <p className="font-bold text-lg">{service.name}</p>
-                  <p className="text-sm text-gray-600">{service.duration}</p>
-                  <p className="text-purple-600 font-bold text-xl mt-2">
-                    {"฿" + service.price}
+        <div className="bg-white/80 backdrop-blur-lg p-8 rounded-3xl shadow-2xl space-y-8">
+          {/* Select Service */}
+          <div>
+            <label className="block text-xl font-bold mb-4 text-gray-800">
+              Select Service
+            </label>
+            <div className="grid grid-cols-2 gap-4">
+              {loadingServices ? (
+                  <p className="col-span-2 text-center text-gray-600">
+                    Loading services...
                   </p>
-                </button>
-              ))
-            )}
-          </div>
-        </div>
-
-        {/* ✅ Select Date */}
-        <div>
-          <label className="block text-xl font-bold mb-4 text-gray-800">
-            Select Date
-          </label>
-          <input
-            type="date"
-            value={selectedDate}
-            onChange={(e) => setSelectedDate(e.target.value)}
-            className="w-full px-4 py-4 border-2 border-gray-200 rounded-2xl focus:outline-none focus:border-purple-600 transition text-lg"
-          />
-        </div>
-
-        {/* ✅ Select Time */}
-        <div>
-          <label className="block text-xl font-bold mb-4 text-gray-800">
-            Select Time
-          </label>
-          <div className="grid grid-cols-4 gap-3">
-            {TIME_SLOTS.filter((time) => !bookedTimes.includes(time)).map(
-              (time) => (
-                <button
-                  key={time}
-                  onClick={() => setSelectedTime(time)}
-                  className={`p-4 rounded-xl border-2 transition-all font-semibold ${
-                    selectedTime === time
-                      ? "border-purple-600 bg-gradient-to-br from-purple-600 to-pink-600 text-white shadow-lg transform scale-105"
-                      : "border-gray-200 hover:border-purple-300 bg-white text-gray-700"
-                  }`}
-                >
-                  {time}
-                </button>
-              )
-            )}
-            {bookedTimes.length > 0 &&
-              bookedTimes.length === TIME_SLOTS.length && (
-                <p className="col-span-4 text-center text-red-500 font-semibold">
-                  All time slots are booked for this date.
-                </p>
+              ) : services.length === 0 ? (
+                  <p className="col-span-2 text-center text-red-600">
+                    No services found.
+                  </p>
+              ) : (
+                  services.map((service) => (
+                      <button
+                          key={service.id}
+                          onClick={() => setSelectedService(service.name)}
+                          className={`p-6 rounded-2xl border-2 transition-all transform hover:scale-105 ${
+                              selectedService === service.name
+                                  ? "border-purple-600 bg-gradient-to-br from-purple-50 to-pink-50 shadow-lg"
+                                  : "border-gray-200 hover:border-purple-300 bg-white"
+                          }`}
+                      >
+                        <div className="text-3xl mb-2">{service.icon}</div>
+                        <p className="font-bold text-lg">{service.name}</p>
+                        <p className="text-sm text-gray-600">{service.duration}</p>
+                        <p className="text-purple-600 font-bold text-xl mt-2">
+                          {"฿" + service.price}
+                        </p>
+                      </button>
+                  ))
               )}
+            </div>
           </div>
-        </div>
 
-        {/* ✅ Confirm Button */}
-        <button
-          onClick={confirmBooking}
-          disabled={isSubmitting}
-          className={`w-full py-5 rounded-2xl font-bold text-xl transition transform hover:scale-105 ${
-            isSubmitting
-              ? "bg-gray-400 cursor-not-allowed text-white"
-              : "bg-gradient-to-r from-purple-600 via-pink-600 to-blue-600 text-white hover:shadow-2xl"
-          }`}
-        >
-          {isSubmitting ? "Processing..." : "Confirm Booking"}
-        </button>
+          {/* Select Date */}
+          <div>
+            <label className="block text-xl font-bold mb-4 text-gray-800">
+              Select Date
+            </label>
+            <input
+                type="date"
+                value={selectedDate}
+                onChange={(e) => setSelectedDate(e.target.value)}
+                // Set min date to today
+                min={new Date().toISOString().split("T")[0]}
+                className="w-full px-4 py-4 border-2 border-gray-200 rounded-2xl focus:outline-none focus:border-purple-600 transition text-lg"
+            />
+          </div>
+
+          {/* --- THIS IS THE FIX --- */}
+          {/* Select Time (now shows disabled buttons) */}
+          <div>
+            <label className="block text-xl font-bold mb-4 text-gray-800">
+              Select Time
+            </label>
+            <div className="grid grid-cols-4 gap-3">
+              {TIME_SLOTS.map((time) => {
+                const isBooked = bookedTimes.includes(time);
+                return (
+                    <button
+                        key={time}
+                        onClick={() => setSelectedTime(time)}
+                        disabled={isBooked} // <-- Disable button if booked
+                        className={`p-4 rounded-xl border-2 transition-all font-semibold ${
+                            selectedTime === time
+                                ? "border-purple-600 bg-gradient-to-br from-purple-600 to-pink-600 text-white shadow-lg transform scale-105"
+                                : "border-gray-200 bg-white text-gray-700"
+                        } ${
+                            isBooked
+                                ? "bg-red-50 border-red-200 text-red-400 line-through cursor-not-allowed"
+                                : "hover:border-purple-300"
+                        }`}
+                    >
+                      {time}
+                    </button>
+                );
+              })}
+
+              {/* Show message if all slots are booked */}
+              {selectedDate && TIME_SLOTS.every(time => bookedTimes.includes(time)) && (
+                  <p className="col-span-4 text-center text-red-500 font-semibold">
+                    All time slots are booked for this date.
+                  </p>
+              )}
+            </div>
+          </div>
+          {/* --- END OF FIX --- */}
+
+          {/* Confirm Button */}
+          <button
+              onClick={confirmBooking}
+              disabled={isSubmitting}
+              className={`w-full py-5 rounded-2xl font-bold text-xl transition transform hover:scale-105 ${
+                  isSubmitting
+                      ? "bg-gray-400 cursor-not-allowed text-white"
+                      : "bg-gradient-to-r from-purple-600 via-pink-600 to-blue-600 text-white hover:shadow-2xl"
+              }`}
+          >
+            {isSubmitting ? "Processing..." : "Confirm Booking"}
+          </button>
+        </div>
       </div>
-    </div>
   );
 }

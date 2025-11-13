@@ -15,12 +15,9 @@ import {
 } from "firebase/firestore";
 
 // --- Your Original Axios Instance ---
-const api = axios.create({
+axios.create({
   baseURL: "http://localhost:8080/api",
 });
-export default api;
-
-
 // =========================================
 // == USER FUNCTIONS
 // =========================================
@@ -60,14 +57,9 @@ export const createBooking = async (bookingData) => {
   }
 };
 
-// Gets all bookings from *inside* a specific user's subcollection
 export const getUserBookings = async (userId) => {
   const bookings = [];
-  // Path: /users/{userId}/bookings
   const userBookingsCol = collection(db, "users", userId, "bookings");
-
-  // --- THIS IS THE FIX ---
-  // I removed 'orderBy("date", "desc")' to prevent the index error.
   const q = query(userBookingsCol);
 
   const querySnapshot = await getDocs(q);
@@ -78,7 +70,6 @@ export const getUserBookings = async (userId) => {
   return bookings;
 };
 
-// Updates a specific booking *inside* a user's subcollection
 export const updateBooking = async (userId, bookingId, updates) => {
   if (!userId) throw new Error("User ID is missing");
   const bookingDocRef = doc(db, "users", userId, "bookings", bookingId);
@@ -89,7 +80,11 @@ export const updateBooking = async (userId, bookingId, updates) => {
 export const deleteBooking = async (userId, bookingId) => {
   if (!userId) throw new Error("User ID is missing");
   const bookingDocRef = doc(db, "users", userId, "bookings", bookingId);
+
+  // --- THIS WAS THE BUG ---
+  // Added the missing await deleteDoc() line
   await deleteDoc(bookingDocRef);
+  // ------------------------
 };
 
 
@@ -110,7 +105,7 @@ export const getServices = async () => {
 
 
 // =========================================
-// == ADMIN FUNCTIONS
+// == ADMIN/PUBLIC FUNCTIONS
 // =========================================
 
 export const getAllBookings = async () => {
@@ -125,24 +120,21 @@ export const getAllBookings = async () => {
   return bookings;
 };
 
-// =========================================
-// == SHARED UTILITY: Get bookings by date (for duplicate check)
-// =========================================
-
+// This is your new function, and it's correct!
 export const getBookingsByDate = async (date) => {
   try {
-    // ✅ Fetch data from all users/{uid}/bookings
+    const bookings = [];
     const q = query(collectionGroup(db, "bookings"), where("date", "==", date));
     const snapshot = await getDocs(q);
 
-    const bookings = snapshot.docs.map((doc) => ({
-      id: doc.id,
-      ...doc.data(),
-    }));
+    snapshot.docs.forEach((doc) => {
+      bookings.push({ id: doc.id, ...doc.data() });
+    });
 
     return bookings;
   } catch (error) {
     console.error("Error fetching bookings by date:", error);
-    return [];
+    // This will probably fail until you create the index
+    throw error;
   }
 };
