@@ -1,5 +1,5 @@
 import React, { createContext, useState, useEffect, useContext } from "react";
-import { auth, db } from "../services/firebase"; // <-- Import from your new file
+import { auth, db } from "../services/firebase";
 import {
   onAuthStateChanged,
   signInWithEmailAndPassword,
@@ -10,9 +10,7 @@ import { doc, getDoc, setDoc } from "firebase/firestore";
 
 export const AuthContext = createContext();
 
-export const useAuth = () => {
-  return useContext(AuthContext);
-};
+export const useAuth = () => useContext(AuthContext);
 
 export const AuthProvider = ({ children }) => {
   const [currentUser, setCurrentUser] = useState(null);
@@ -20,75 +18,79 @@ export const AuthProvider = ({ children }) => {
   const [isAdmin, setIsAdmin] = useState(false);
   const [loading, setLoading] = useState(true);
 
+  // --- LOGIN ---
   const login = (email, password) => {
     return signInWithEmailAndPassword(auth, email, password);
   };
 
-  // --- THIS FUNCTION IS UPDATED ---
+  // --- SIGNUP ---
   const signup = async (email, password, name, phone) => {
     const userCredential = await createUserWithEmailAndPassword(auth, email, password);
     const user = userCredential.user;
 
-    // Create the data object
     const newUserData = {
-      name: name,
-      email: email,
-      phone: phone,
-      role: "user", // Default role
+      name,
+      email,
+      phone,
+      role: "user",
     };
 
-    // Now, create a user document in Firestore
     const userDocRef = doc(db, "users", user.uid);
     await setDoc(userDocRef, newUserData);
 
-    // --- THIS IS THE FIX ---
-    // Manually set the userData in our context
-    // This prevents the race condition on signup
+    // ✅ Set userData immediately (prevent race condition)
     setUserData(newUserData);
-    // --------------------
-
     return userCredential;
   };
 
+  // --- LOGOUT ---
   const logout = () => {
     return signOut(auth);
   };
 
+  // --- AUTH STATE LISTENER ---
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       setCurrentUser(user);
 
       if (user) {
-        const userDocRef = doc(db, "users", user.uid);
-        const docSnap = await getDoc(userDocRef);
+        try {
+          const userDocRef = doc(db, "users", user.uid);
+          const docSnap = await getDoc(userDocRef);
 
-        if (docSnap.exists()) {
-          const data = docSnap.data();
-          setUserData(data);
-          setIsAdmin(data.role === "admin");
-        } else {
-          // This can happen on signup race condition,
-          // but our new signup function fixes it.
-          if (!userData) { // Only set to null if not already set by signup
+          if (docSnap.exists()) {
+            const data = docSnap.data();
+            setUserData(data);
+            setIsAdmin(data.role === "admin");
+          } else {
+            // If no document found (possibly a newly registered user)
             setUserData(null);
+            setIsAdmin(false);
           }
+        } catch (error) {
+          console.error("Error fetching user data:", error);
+          setUserData(null);
           setIsAdmin(false);
         }
       } else {
+        // Not logged in
         setUserData(null);
         setIsAdmin(false);
       }
+
       setLoading(false);
     });
 
+    // ✅ Return unsubscribe to clean up listener
     return unsubscribe;
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // ✅ No need to include userData as a dependency
 
-  // --- THIS VALUE OBJECT IS UPDATED ---
+  // --- VALUE FOR CONTEXT ---
   const value = {
     currentUser,
     userData,
-    setUserData, // <-- ADD THIS so ProfilePage can use it
+    setUserData,
     isLoggedIn: !!currentUser,
     isAdmin,
     login,
@@ -97,9 +99,10 @@ export const AuthProvider = ({ children }) => {
     loading,
   };
 
+  // ✅ Render children only after loading completes (prevent early redirect)
   return (
-      <AuthContext.Provider value={value}>
-        {!loading && children}
-      </AuthContext.Provider>
+    <AuthContext.Provider value={value}>
+      {!loading && children}
+    </AuthContext.Provider>
   );
 };

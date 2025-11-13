@@ -10,7 +10,6 @@ import {
   deleteDoc,
   query,
   where,
-  setDoc,
   collectionGroup,
   orderBy
 } from "firebase/firestore";
@@ -124,4 +123,26 @@ export const getAllBookings = async () => {
     bookings.push({ id: doc.id, ...doc.data() });
   });
   return bookings;
+};
+
+// =========================================
+// == SHARED UTILITY: Get bookings by date (for duplicate check)
+// =========================================
+
+export const getBookingsByDate = async (date) => {
+  try {
+    // ✅ Fetch data from all users/{uid}/bookings
+    const q = query(collectionGroup(db, "bookings"), where("date", "==", date));
+    const snapshot = await getDocs(q);
+
+    const bookings = snapshot.docs.map((doc) => ({
+      id: doc.id,
+      ...doc.data(),
+    }));
+
+    return bookings;
+  } catch (error) {
+    console.error("Error fetching bookings by date:", error);
+    return [];
+  }
 };
